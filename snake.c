@@ -54,8 +54,8 @@ task tasks[2];
 const unsigned short tasksNum = 2;
 
 // constant variables
-const unsigned long periodGCD = 500;
-const unsigned long periodLedMatrix = 50;
+const unsigned long periodGCD = 50;
+const unsigned long periodLedMatrix = 500;
 const unsigned long periodJoystick = 50;
 
 // shared variables
@@ -112,7 +112,7 @@ void shift_register (unsigned char control_line, unsigned char green_lines, unsi
 	PORTB |= 0x02;
 	
 	// clear lines
-	PORTB = 0x00;
+	//PORTB = 0x00;
 }
 
 // samples ADC from joystick and then chooses either up/down/left/right/none for direction
@@ -166,11 +166,12 @@ int led_matrix_SM (int state) {
 	
 	switch (state) { // actions
 		case led_start:
+			shift_register(0x10, 0xF7, 0xFF);
 			break;
 		case red:
 			//shift_register(0x55, 0xFF, 0x00);
 			shift_register(0x55, 0xFF, 0x55);
-			// set low the column you want, set high the color you want
+			// set high the column you want, set low the color you want
 			break;
 		case green:
 			//shift_register(0xAA, 0x00, 0xFF);
