@@ -50,16 +50,17 @@ typedef struct task {
 } task;
 
 // array to hold tasks
-task tasks[2];
-const unsigned short tasksNum = 2;
+task tasks[1];
+const unsigned short tasksNum = 1;
 
 // constant variables
 const unsigned long periodGCD = 50;
-const unsigned long periodLedMatrix = 500;
+const unsigned long periodLedMatrix = 250;
 const unsigned long periodJoystick = 50;
 
 // shared variables
 unsigned char matrix_coordinates[8][8];
+unsigned char lines_control, lines_green, lines_red;
 
 /*	pin set up for shift register
  * PB0 = SER	(0x01)	start of data input
@@ -86,7 +87,7 @@ void shift_register (unsigned char control_line, unsigned char green_lines, unsi
 	// volatile since otherwise compiler will optimize and remove it
 	volatile unsigned long conversion = 0x00000000;
 	
-	// set data so that it is in the form [0] [red] [green] [control]
+	// set data so that it is in the form [0 == blue] [red] [green] [control]
 	unsigned long data = 0x00000000;
 	data |= (control_line | conversion);
 	data |= (green_lines | conversion) << 8;
@@ -94,6 +95,7 @@ void shift_register (unsigned char control_line, unsigned char green_lines, unsi
 	
 	// iterate for all 32 data bits
 	// shift starting from MSB and going to LSB
+	// aka [0 == blue] goes out first
 	for (i = 32; i > 0; i--) {
 		// set SRCLR to 1 to allow new data to be set
 		// set SRCLK to 0 to stop sending of data
@@ -123,24 +125,24 @@ char chose_direction() {
 	ud_val = set_adc_mux(0x00);
 	lr_val = set_adc_mux(0x01);
 	
-	// left logic
+	// left logic shifted to right
 	if ( (lr_val < (512 - 256)) && (abs(ud_val - 512) < 256) ) {
-		return 'l';
-	}
-	
-	// right logic
-	if ( (lr_val >= (512 + 256)) && (abs(ud_val - 512) < 256) ) {
 		return 'r';
 	}
 	
-	// up logic
-	if ( (ud_val >= (512 + 256)) && (abs(lr_val - 512) < 256) ) {
-		return 'u';
+	// right logic shifted to left
+	if ( (lr_val >= (512 + 256)) && (abs(ud_val - 512) < 256) ) {
+		return 'l';
 	}
 	
-	// down logic
-	if ( (ud_val < (512 - 256)) && (abs(lr_val - 512) < 256) ) {
+	// up logic shifted to down
+	if ( (ud_val >= (512 + 256)) && (abs(lr_val - 512) < 256) ) {
 		return 'd';
+	}
+	
+	// down logic shifted to up
+	if ( (ud_val < (512 - 256)) && (abs(lr_val - 512) < 256) ) {
+		return 'u';
 	}
 	
 	// no conditions met
@@ -166,11 +168,14 @@ int led_matrix_SM (int state) {
 	
 	switch (state) { // actions
 		case led_start:
-			shift_register(0x10, 0xF7, 0xFF);
+			//shift_register(0x10, 0xF7, 0xFF);
 			break;
 		case red:
+			lines_control = 0x55;
+			lines_green = 0xFF;
+			lines_red = 0x55;
 			//shift_register(0x55, 0xFF, 0x00);
-			shift_register(0x55, 0xFF, 0x55);
+			shift_register(lines_control, lines_green, lines_red);
 			// set high the column you want, set low the color you want
 			break;
 		case green:
@@ -207,18 +212,81 @@ int joystick_SM (int state) {
 			else if (new_direction == 'd') {
 				state = down;
 			}
+			else {
+				state = wait;
+			}
 			break;
 		case up:
-			state = wait;
+			new_direction = chose_direction();
+			if (new_direction == 'l') {
+				state = left;
+			}
+			else if (new_direction == 'r') {
+				state = right;
+			}
+			else if (new_direction == 'u') {
+				state = up;
+			}
+			else if (new_direction == 'd') {
+				state = down;
+			}
+			else {
+				state = up;
+			}
 			break;
 		case down:
-			state = wait;
+			new_direction = chose_direction();
+			if (new_direction == 'l') {
+				state = left;
+			}
+			else if (new_direction == 'r') {
+				state = right;
+			}
+			else if (new_direction == 'u') {
+				state = up;
+			}
+			else if (new_direction == 'd') {
+				state = down;
+			}
+			else {
+				state = down;
+			}
 			break;
 		case left:
-			state = wait;
+			new_direction = chose_direction();
+			if (new_direction == 'l') {
+				state = left;
+			}
+			else if (new_direction == 'r') {
+				state = right;
+			}
+			else if (new_direction == 'u') {
+				state = up;
+			}
+			else if (new_direction == 'd') {
+				state = down;
+			}
+			else {
+				state = left;
+			}
 			break;
 		case right:
-			state = wait;
+			new_direction = chose_direction();
+			if (new_direction == 'l') {
+				state = left;
+			}
+			else if (new_direction == 'r') {
+				state = right;
+			}
+			else if (new_direction == 'u') {
+				state = up;
+			}
+			else if (new_direction == 'd') {
+				state = down;
+			}
+			else {
+				state = right;
+			}
 			break;
 		default:
 			state = joystick_start;
@@ -229,18 +297,38 @@ int joystick_SM (int state) {
 		case joystick_start:
 			break;
 		case wait:
+			lines_control = 0xAA;
+			lines_green = 0xAA;
+			lines_red = 0xFF;
+			shift_register(lines_control, lines_green, lines_red);
 			break;
 		case up:
+			lines_control = lines_control;
+			lines_green >>= 1;
+			lines_red = lines_red;
 			LCD_DisplayString(1, "UP");
+			shift_register(lines_control, lines_green, lines_red);
 			break;
 		case down:
+			lines_control = lines_control;
+			lines_green <<= 1;
+			lines_red = lines_red;
 			LCD_DisplayString(1, "down");
+			shift_register(lines_control, lines_green, lines_red);
 			break;
 		case left:
+			lines_control <<= 1;
+			lines_green = lines_green;
+			lines_red = lines_red;
 			LCD_DisplayString(1, "left");
+			shift_register(lines_control, lines_green, lines_red);
 			break;
 		case right:
+			lines_control >>= 1;
+			lines_green = lines_green;
+			lines_red = lines_red;
 			LCD_DisplayString(1, "RIGHT");
+			shift_register(lines_control, lines_green, lines_red);
 			break;
 		default:
 			break;
@@ -261,12 +349,13 @@ int main (void) {
 	ADC_init();
 	
 	unsigned char i = 0;
+/*
 	tasks[i].state = led_start;
 	tasks[i].period = periodLedMatrix;
 	tasks[i].elapsedTime = 0;
 	tasks[i].TickFct = &led_matrix_SM;
 	i++;
-	
+*/
 	tasks[i].state = joystick_start;
 	tasks[i].period = periodJoystick;
 	tasks[i].elapsedTime = 0;
